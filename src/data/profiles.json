@@ -1,0 +1,18 @@
+[
+  {
+    "id": "jack",
+    "name": "Jack",
+    "age": 22,
+    "occupation": "Product Designer",
+    "avatarUrl": "/avatars/jack.png",
+    "chat": "Jack: yo I just saw this insane sunset...\nAlex: omg where??\nJack: at the lake, felt unreal...\n..."
+  },
+  {
+    "id": "maya",
+    "name": "Maya",
+    "age": 21,
+    "occupation": "CompEng Student",
+    "avatarUrl": "/avatars/maya.png",
+    "chat": "Maya: i lowkey love debating random topics\nSam: ok take: pineapple on pizza...\nMaya: acceptable but only sometimes...\n..."
+  }
+]
