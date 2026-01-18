@@ -1,78 +1,101 @@
-// to be changed - this is a simple deterministic scorer
+// ============================================================================
+// deterministic scoring utilities
+// these are pure functions for calculating compatibility subscores
+// the main scoring logic is in the langgraph node, but these can be used
+// for testing or if you want to run scoring without the ai insights
+// ============================================================================
 
-import type { ConversationDNA } from "@/lib/schemas/dna";
-import type { CompatibilityScore } from "@/lib/schemas/score";
+import type { ConversationDNA } from "@/lib/graph/state";
+import type { CompatibilityScore } from "@/lib/graph/state";
 
-function clamp(n: number, min: number, max: number) {
+// helper: clamp a number between min and max
+function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
-function similarity01(a: number, b: number) {
-  // 1 = same, 0 = far
-  return 1 - clamp(Math.abs(a - b), 0, 1);
+// helper: calculate similarity between two 0-1 values (1 = identical, 0 = opposite)
+function similarity(a: number, b: number): number {
+  return 1 - Math.abs(a - b);
 }
 
-export function scorePair(a: ConversationDNA, b: ConversationDNA): CompatibilityScore {
-  // Style similarity
-  const emojiFit = similarity01(a.style.emojiRate, b.style.emojiRate);
-  const punctFit = similarity01(a.style.punctuationIntensity, b.style.punctuationIntensity);
+// helper: check if values complement each other
+function complementarity(a: number, b: number): number {
+  return 1 - Math.abs((a + b) - 1);
+}
 
-  const warmthFit01 = similarity01(a.socioEmotional.warmth, b.socioEmotional.warmth);
-  const humorFit01 = similarity01(a.socioEmotional.humor, b.socioEmotional.humor);
-  const directFit01 = similarity01(a.socioEmotional.directness, b.socioEmotional.directness);
+// deterministic scoring function - no ai needed
+// useful for quick calculations or testing
+export function scorePairDeterministic(a: ConversationDNA, b: ConversationDNA): CompatibilityScore {
+  // style fit: how similar are their writing styles?
+  const styleFit = (
+    similarity(a.style.verbosity, b.style.verbosity) * 0.25 +
+    similarity(a.style.emojiUsage, b.style.emojiUsage) * 0.2 +
+    similarity(a.style.punctuationStyle, b.style.punctuationStyle) * 0.15 +
+    similarity(a.style.slangLevel, b.style.slangLevel) * 0.2 +
+    similarity(a.style.formality, b.style.formality) * 0.2
+  );
 
-  // Pace proxy: verbosity + avg message length
-  const lenFit = 1 - clamp(Math.abs(a.style.avgMessageLength - b.style.avgMessageLength) / 200, 0, 1);
-  const paceFit01 = (lenFit + directFit01) / 2;
+  // pace fit: conversation rhythm match
+  const paceFit = (
+    similarity(a.interaction.responseDepth, b.interaction.responseDepth) * 0.3 +
+    similarity(a.interaction.turnTakingBalance, b.interaction.turnTakingBalance) * 0.3 +
+    complementarity(a.interaction.questionRate, b.interaction.responseDepth) * 0.4
+  );
 
-  // Depth fit (simple)
-  const depthMap: Record<string, number> = { smalltalk: 0, mixed: 0.5, deep: 1 };
-  const depthFit01 = similarity01(depthMap[a.preferences.depthPreference], depthMap[b.preferences.depthPreference]);
+  // warmth fit: emotional tone
+  const warmthFit = (
+    similarity(a.socialSignals.warmth, b.socialSignals.warmth) * 0.4 +
+    similarity(a.socialSignals.empathyMarkers, b.socialSignals.empathyMarkers) * 0.3 +
+    similarity(a.socialSignals.enthusiasm, b.socialSignals.enthusiasm) * 0.3
+  );
 
-  // Conflict fit (if missing, neutral)
-  const conflictMap: Record<string, number> = { avoidant: 0.2, calm: 0.6, direct: 0.8, escalatory: 0.0 };
-  const ca = a.preferences.conflictStyle ? conflictMap[a.preferences.conflictStyle] : 0.6;
-  const cb = b.preferences.conflictStyle ? conflictMap[b.preferences.conflictStyle] : 0.6;
-  const conflictFit01 = similarity01(ca, cb);
+  // humor fit
+  const humorFit = similarity(a.socialSignals.humor, b.socialSignals.humor);
 
-  const styleFit01 = (emojiFit + punctFit) / 2;
-  const warmthFit = warmthFit01;
-  const humorFit = humorFit01;
+  // depth fit
+  const depthFit = (
+    similarity(a.topics.depthPreference, b.topics.depthPreference) * 0.5 +
+    similarity(a.topics.curiosityBreadth, b.topics.curiosityBreadth) * 0.3 +
+    similarity(a.needs.needsDepth, b.topics.depthPreference) * 0.2
+  );
 
-  // Weighted overall (0..1)
-  const overall01 =
-    0.30 * styleFit01 +
-    0.20 * paceFit01 +
-    0.20 * warmthFit +
-    0.15 * humorFit +
-    0.10 * depthFit01 +
-    0.05 * conflictFit01;
+  // conflict fit
+  const conflictStyleMatch = a.conflictHandling.style === b.conflictHandling.style ? 1 : 
+    (a.conflictHandling.style === "collaborative" || b.conflictHandling.style === "collaborative") ? 0.8 :
+    (a.conflictHandling.style === "avoidant" && b.conflictHandling.style === "direct") ? 0.3 : 0.5;
+  
+  const conflictFit = (
+    conflictStyleMatch * 0.5 +
+    similarity(a.conflictHandling.defensiveness, b.conflictHandling.defensiveness) * 0.25 +
+    similarity(a.conflictHandling.resolutionFocus, b.conflictHandling.resolutionFocus) * 0.25
+  );
 
-  // Confidence from data quality
-  const conf01 = (a.confidence.dataQuality + b.confidence.dataQuality) / 2;
+  // calculate overall with weights
+  const overall = Math.round(
+    styleFit * 15 +
+    paceFit * 15 +
+    warmthFit * 25 +
+    humorFit * 20 +
+    depthFit * 15 +
+    conflictFit * 10
+  );
 
-  // Risk flags (basic)
-  const riskFlags: string[] = [];
-  if (styleFit01 < 0.4) riskFlags.push("Different communication styles (emoji/punctuation/energy mismatch).");
-  if (depthFit01 < 0.4) riskFlags.push("Different depth preference (small talk vs deep talk mismatch).");
-  if (humorFit01 < 0.3) riskFlags.push("Humor mismatch risk (one jokes more than the other).");
-
-  const overall = Math.round(overall01 * 100);
-  const confidence = Math.round(clamp(conf01 * 100, 0, 100));
+  // confidence based on data quality
+  const confidence = Math.round((a.confidence + b.confidence) / 2 * 100);
 
   return {
     overall,
     confidence,
     subscores: {
-      styleFit: Math.round(styleFit01 * 100),
-      paceFit: Math.round(paceFit01 * 100),
+      styleFit: Math.round(styleFit * 100),
+      paceFit: Math.round(paceFit * 100),
       warmthFit: Math.round(warmthFit * 100),
       humorFit: Math.round(humorFit * 100),
-      depthFit: Math.round(depthFit01 * 100),
-      conflictFit: Math.round(conflictFit01 * 100),
+      depthFit: Math.round(depthFit * 100),
+      conflictFit: Math.round(conflictFit * 100),
     },
-    riskFlags,
-    whyItWorks: [],
+    whyItWorks: [], // deterministic version doesnt generate these
     watchOuts: [],
+    dynamicPrediction: "",
   };
 }
