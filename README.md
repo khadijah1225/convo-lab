@@ -187,4 +187,4 @@ The AI-powered features require the appropriate API credentials to be configured
 - Expand Conversation DNA with additional behavioral dimensions.
 - Run multiple simulations as a consistency check against the primary compatibility analysis.
 - Evaluate scoring against real outcomes rather than relying solely on predicted compatibility.
-- Explore applications beyond dating, including networking and team matching.
+- Explore additional application use cases, including networking and team matching.
